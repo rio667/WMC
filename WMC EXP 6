@@ -1,0 +1,137 @@
+def plot_noise_analysis(analyzer):
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+    fig.suptitle('Wireless Communication Noise and Interference Analysis', fontsize=16)
+   
+    bandwidths = np.logspace(3, 9, 100)
+    noise_powers = [analyzer.thermal_noise_power(bw)[1] for bw in bandwidths]
+   
+    axes[0, 0].semilogx(bandwidths, noise_powers, 'b-', linewidth=2)
+    axes[0, 0].grid(True, alpha=0.3)
+    axes[0, 0].set_xlabel('Bandwidth (Hz)')
+    axes[0, 0].set_ylabel('Thermal Noise Power (dBm)')
+    axes[0, 0].set_title('Thermal Noise Power vs Bandwidth')
+    axes[0, 0].axhline(y=analyzer.P_noise_eff_dBm, color='r', linestyle='--', label=f'System NF={analyzer.NF_db}dB')
+    axes[0, 0].legend()
+   
+    snr_range = np.linspace(0, 20, 100)
+    modulations = ['BPSK', 'QPSK', '16QAM', '64QAM']
+    colors = ['b', 'g', 'r', 'c']
+   
+    for mod, color in zip(modulations, colors):
+        ber = [analyzer.ber_awgn(snr, mod) for snr in snr_range]
+        axes[0, 1].semilogy(snr_range, ber, color=color, label=mod, linewidth=2)
+   
+    axes[0, 1].grid(True, alpha=0.3)
+    axes[0, 1].set_xlabel('SNR (dB)')
+    axes[0, 1].set_ylabel('Bit Error Rate (BER)')
+    axes[0, 1].set_title('BER Performance in AWGN')
+    axes[0, 1].legend()
+    axes[0, 1].set_ylim([1e-6, 1])
+   
+    sinr_range = np.linspace(-10, 30, 100)
+    capacities = [analyzer.capacity_shannon(sinr) / 1e6 for sinr in sinr_range]
+   
+    axes[0, 2].plot(sinr_range, capacities, 'b-', linewidth=2)
+    axes[0, 2].grid(True, alpha=0.3)
+    axes[0, 2].set_xlabel('SINR (dB)')
+    axes[0, 2].set_ylabel('Capacity (Mbps)')
+    axes[0, 2].set_title(f'Shannon Capacity (B={analyzer.B/1e6:.0f} MHz)')
+   
+    sinr_values, interference_powers = analyzer.interference_scenarios(10000)
+   
+    axes[1, 0].hist(sinr_values, bins=50, density=True, alpha=0.7, color='blue')
+    axes[1, 0].set_xlabel('SINR (dB)')
+    axes[1, 0].set_ylabel('Probability Density')
+    axes[1, 0].set_title('SINR Distribution with Random Interference')
+    axes[1, 0].grid(True, alpha=0.3)
+   
+    interference_powers_dbm = 10 * np.log10(np.array(interference_powers) + 1e-12)
+   
+    axes[1, 1].hist(interference_powers_dbm, bins=50, density=True, alpha=0.7, color='red')
+    axes[1, 1].set_xlabel('Interference Power (dBm)')
+    axes[1, 1].set_ylabel('Probability Density')
+    axes[1, 1].set_title('Interference Power Distribution')
+    axes[1, 1].grid(True, alpha=0.3)
+   
+    num_interferers = range(1, 11)
+    sinr_avg = []
+    sinr_std = []
+   
+    for n in num_interferers:
+        sinr_vals, _ = analyzer.interference_scenarios(1000)
+        sinr_avg.append(np.mean(sinr_vals))
+        sinr_std.append(np.std(sinr_vals))
+   
+    axes[1, 2].errorbar(num_interferers, sinr_avg, yerr=sinr_std, fmt='o-', capsize=5, linewidth=2)
+    axes[1, 2].set_xlabel('Number of Interferers')
+    axes[1, 2].set_ylabel('Average SINR (dB)')
+    axes[1, 2].set_title('SINR vs Number of Interferers')
+    axes[1, 2].grid(True, alpha=0.3)
+   
+    plt.tight_layout()
+    plt.show()
+
+def main():
+    print("=" * 60)
+    print("WIRELESS COMMUNICATION NOISE & INTERFERENCE ANALYSIS")
+    print("=" * 60)
+   
+    analyzer = WirelessNoiseInterferenceAnalyzer(
+        bandwidth_hz=20e6,
+        temperature_k=290,
+        noise_figure_db=3
+    )
+   
+    print("\nSystem Parameters:")
+    print(f"  Bandwidth: {analyzer.B/1e6:.1f} MHz")
+    print(f"  Temperature: {analyzer.T} K")
+    print(f"  Noise Figure: {analyzer.NF_db} dB")
+    print(f"  Thermal Noise PSD: {analyzer.N0_dBm:.2f} dBm/Hz")
+    print(f"  Thermal Noise Power: {analyzer.P_noise_dBm:.2f} dBm")
+    print(f"  Effective Noise Power (with NF): {analyzer.P_noise_eff_dBm:.2f} dBm")
+   
+    print("\n" + "=" * 60)
+    print("SINR Calculation Example")
+    print("=" * 60)
+   
+    signal_power = -60
+    interferers = [-70, -75, -80, -65]
+    noise_power = analyzer.P_noise_eff_dBm
+   
+    print(f"Signal Power: {signal_power} dBm")
+    print(f"Noise Power: {noise_power:.2f} dBm")
+    print(f"Interferer Powers: {interferers} dBm")
+   
+    for i in range(1, len(interferers) + 1):
+        sinr, _ = analyzer.sinr_calculation(signal_power, interferers, noise_power, i)
+        capacity = analyzer.capacity_shannon(sinr) / 1e6
+        print(f"\nWith {i} active interferer(s):")
+        print(f"  SINR = {sinr:.2f} dB")
+        print(f"  Capacity = {capacity:.2f} Mbps")
+   
+    print("\n" + "=" * 60)
+    print("Statistical Interference Analysis")
+    print("=" * 60)
+   
+    sinr_values, inter_powers = analyzer.interference_scenarios(10000)
+   
+    print(f"\nSINR Statistics (10000 scenarios):")
+    print(f"  Mean: {np.mean(sinr_values):.2f} dB")
+    print(f"  Std Dev: {np.std(sinr_values):.2f} dB")
+    print(f"  Min: {np.min(sinr_values):.2f} dB")
+    print(f"  Max: {np.max(sinr_values):.2f} dB")
+    print(f"  Median: {np.median(sinr_values):.2f} dB")
+   
+    plot_noise_analysis(analyzer)
+   
+    print("\n" + "=" * 60)
+    print("Outage Probability Analysis")
+    print("=" * 60)
+   
+    sinr_thresholds = [-5, 0, 5, 10, 15]
+    for threshold in sinr_thresholds:
+        outage_prob = np.mean(sinr_values < threshold)
+        print(f"Outage probability (SINR < {threshold} dB): {outage_prob*100:.2f}%")
+
+if __name__ == "__main__":
+    main()
